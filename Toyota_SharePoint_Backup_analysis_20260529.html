@@ -1,0 +1,986 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>May 15 Follow-up — SharePoint Backup Analysis</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #ffffff;
+    --ink: #202124;
+    --muted: #5f6368;
+    --rule: #e8eaed;
+    --brand: #1a73e8;
+    --brand-soft: #e8f0fe;
+    --good: #137333;
+    --good-soft: #e6f4ea;
+    --bad: #c5221f;
+    --bad-soft: #fce8e6;
+    --warn: #b06000;
+    --warn-soft: #fef7e0;
+    --shade: #f8f9fa;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px; line-height: 1.5; }
+  .hero {
+    background: linear-gradient(135deg, #1a73e8 0%, #174ea6 100%);
+    color: #fff; padding: 48px 48px 40px;
+  }
+  .hero .eyebrow { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; opacity: .9; }
+  .hero h1 { font-size: 32px; line-height: 1.2; margin: 8px 0 0; font-weight: 500; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 32px 48px 80px; }
+  section { margin: 40px 0; }
+  h2 {
+    font-size: 22px; font-weight: 500; margin: 0 0 14px;
+    padding-bottom: 8px; border-bottom: 2px solid var(--brand-soft);
+  }
+  h3 { font-size: 17px; font-weight: 500; margin: 20px 0 8px; color: #3c4043; }
+  p { margin: 8px 0; }
+  th, td { font-size: 14px; }
+
+  /* bar chart */
+  .bar-track {
+    position: relative; height: 14px; background: #eef0f3;
+    border-radius: 999px; overflow: hidden; min-width: 80px;
+  }
+  .bar-fill {
+    height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, #1a73e8, #4285f4);
+  }
+  .bar-fill.good { background: linear-gradient(90deg, #137333, #34a853); }
+  .bar-fill.bad  { background: linear-gradient(90deg, #c5221f, #ea4335); }
+  .bar-fill.warn { background: linear-gradient(90deg, #b06000, #f9ab00); }
+  .bar-row {
+    display: grid; grid-template-columns: 130px 1fr 90px;
+    gap: 12px; align-items: center; margin: 6px 0; font-size: 13px;
+  }
+  .bar-row .label { color: var(--muted); font-weight: 500; }
+  .bar-row .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  /* stacked bars */
+  .stacked-bar {
+    display: flex; height: 38px; border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--rule);
+  }
+  .seg {
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 13px; font-weight: 600; min-width: 0;
+    overflow: hidden; white-space: nowrap;
+  }
+  .seg-incr     { background: #1a73e8; }
+  .seg-backlog  { background: #f9ab00; color: #5a3a00; }
+  .seg-free     { background: #b8e0c2; color: #1a4d2e; }
+  .seg-label { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; }
+  .stacked-axis {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--muted); margin-top: 3px;
+  }
+
+  /* vertical column chart (weekly forecast) */
+  .col-chart {
+    position: relative; display: flex; align-items: flex-end; gap: 5px;
+    height: 280px; margin: 26px 0 4px;
+    border-left: 1px solid var(--rule); border-bottom: 2px solid var(--rule);
+  }
+  .col-chart .ceiling {
+    position: absolute; left: 0; right: 0; border-top: 2px dashed var(--good);
+    pointer-events: none;
+  }
+  .col-chart .ceiling span {
+    position: absolute; right: 2px; top: -16px; font-size: 11px; font-weight: 600;
+    color: var(--good); background: var(--bg); padding: 0 4px;
+  }
+  .col {
+    flex: 1; height: 100%; min-width: 0;
+    display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+  }
+  .col .bar {
+    width: 80%; min-height: 2px; border-radius: 3px 3px 0 0;
+    background: linear-gradient(180deg, #4285f4, #1a73e8);
+  }
+  .col.slow .bar { background: linear-gradient(180deg, #fbbc04, #e8910a); }
+  .col.ok .bar { background: linear-gradient(180deg, #34a853, #137333); }
+  .col.ok .vpct { color: var(--good); }
+  .col .vpct {
+    font-size: 11px; font-weight: 700; color: #3c4043;
+    margin-bottom: 3px; white-space: nowrap;
+  }
+  .col.slow .vpct { color: var(--warn); }
+  .col-axis { display: flex; gap: 5px; margin: 4px 0 0; }
+  .col-axis .ax {
+    flex: 1; min-width: 0; text-align: center;
+    font-size: 9px; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .axis-title { text-align: center; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* phase pills */
+  .phase-block { margin: 12px 0 18px; }
+  .phase-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;
+  }
+  .phase-pill {
+    font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+  }
+  .phase-pill.phase-1 { background: var(--warn-soft); color: var(--warn); }
+  .phase-pill.phase-2 { background: var(--good-soft); color: var(--good); }
+  .phase-sub { font-size: 12px; color: var(--muted); }
+
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted);
+    margin: 6px 0 16px; flex-wrap: wrap; }
+  .legend .sw {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    margin-right: 5px; vertical-align: middle;
+  }
+
+  .metric-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px; margin: 16px 0;
+  }
+  .metric {
+    background: var(--shade); border: 1px solid var(--rule); border-radius: 10px;
+    padding: 16px;
+  }
+  .metric .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .metric .v { font-size: 24px; font-weight: 600; margin-top: 4px; color: var(--ink); }
+  .metric .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .metric.accent { background: var(--brand-soft); border-color: #c6dafc; }
+  .metric.accent .v { color: var(--brand); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px;
+    background: #fff; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--rule); }
+  th { background: var(--shade); font-weight: 500; color: #3c4043; }
+  tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .callout {
+    border-left: 4px solid var(--brand);
+    background: var(--brand-soft); padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0;
+  }
+  .callout.good { border-color: var(--good); background: var(--good-soft); }
+  .callout.bad  { border-color: var(--bad);  background: var(--bad-soft); }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout .tag { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+  .callout.good .tag { color: var(--good); }
+  .callout.bad  .tag { color: var(--bad); }
+  .callout.warn .tag { color: var(--warn); }
+  .callout .tag.brand { color: var(--brand); }
+  .formula {
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    background: #f1f3f4; padding: 10px 14px; border-radius: 6px;
+    font-size: 13px; white-space: pre-wrap; margin: 8px 0;
+  }
+
+  /* category strip */
+  .cat-strip {
+    display: grid; grid-template-columns: 2fr 1fr; gap: 14px;
+    margin: 14px 0 20px;
+  }
+  .cat {
+    border-radius: 8px; padding: 6px 12px;
+    border: 1px solid var(--rule);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .cat-backlog { background: var(--warn-soft); border-color: #f4dba6; }
+  .cat-regular { background: var(--brand-soft); border-color: #c6dafc; }
+  .cat-head { display: flex; align-items: center; gap: 8px; }
+  .cat-icon { font-size: 14px; line-height: 1; }
+  .cat-title { font-weight: 600; font-size: 13px; }
+  .cat-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .cat-tag {
+    background: #fff; border: 1px solid var(--rule);
+    padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500;
+  }
+  .cat-backlog .cat-tag { border-color: #f4dba6; color: var(--warn); }
+  .cat-regular .cat-tag { border-color: #c6dafc; color: var(--brand); }
+  .cat-plus { font-size: 16px; color: var(--muted); font-weight: 600; }
+  @media (max-width: 720px) {
+    .cat-strip { grid-template-columns: 1fr; }
+  }
+
+  /* block cards */
+  .block-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 16px 0;
+  }
+  .block-card {
+    background: #fff; border: 1px solid var(--rule); border-radius: 10px;
+    padding: 18px; display: flex; flex-direction: column;
+  }
+  .block-card .pill-top {
+    align-self: flex-start; font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    background: var(--shade); padding: 3px 10px; border-radius: 999px; color: var(--muted); margin-bottom: 8px;
+  }
+  .block-card h4 { margin: 0 0 6px; font-size: 15px; }
+  .block-card .big { font-size: 26px; font-weight: 600; color: var(--brand); margin: 6px 0; }
+  .block-card p { font-size: 13px; color: #3c4043; margin: 4px 0; }
+
+  /* verdicts */
+  .verdict-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .verdict { padding: 18px; border-radius: 10px; border: 1px solid var(--rule); }
+  .verdict.bad  { background: var(--bad-soft);  border-color: #f5c6c4; }
+  .verdict.good { background: var(--good-soft); border-color: #b8e0c2; }
+  .verdict h4 { margin: 0 0 6px; font-size: 15px; }
+  .verdict .badge {
+    display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px;
+    border-radius: 999px; margin-bottom: 8px;
+  }
+  .verdict.bad .badge  { background: #fff; color: var(--bad); }
+  .verdict.good .badge { background: #fff; color: var(--good); }
+
+  /* collapsible details */
+  details.section-detail {
+    margin: 10px 0; border: 1px solid var(--rule); border-radius: 8px;
+    background: var(--shade);
+  }
+  details.section-detail summary {
+    cursor: pointer; font-weight: 500; font-size: 14px; color: #3c4043;
+    padding: 10px 16px;
+  }
+  details.section-detail > div { padding: 4px 16px 14px; }
+  details.section-detail table { margin: 8px 0; }
+
+  /* Q&A */
+  details.qa {
+    background: #fff; border: 1px solid var(--rule); border-radius: 8px;
+    padding: 10px 16px; margin: 6px 0;
+  }
+  details.qa[open] { background: var(--shade); }
+  details.qa summary {
+    cursor: pointer; font-weight: 500; font-size: 14px; color: #3c4043;
+    list-style: none; display: flex; gap: 8px; align-items: flex-start;
+  }
+  details.qa summary::-webkit-details-marker { display: none; }
+  details.qa summary::before { content: "Q"; color: var(--brand); font-weight: 700; flex-shrink: 0; }
+  details.qa .a { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--rule); color: #3c4043; font-size: 14px; }
+  details.qa .a::before { content: "A "; color: var(--good); font-weight: 700; margin-right: 4px; }
+  .qa-group { margin: 16px 0; }
+  .qa-group h3 { margin-bottom: 6px; }
+  .qa-group .group-tag {
+    display: inline-block; background: var(--brand-soft); color: var(--brand);
+    font-size: 12px; padding: 2px 10px; border-radius: 999px; margin-left: 8px; vertical-align: middle;
+  }
+
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.bad  { background: var(--bad-soft);  color: var(--bad); }
+
+  /* key takeaway banner */
+  .takeaway {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 20px 0;
+  }
+  .takeaway-card {
+    background: #fff; border: 2px solid var(--brand); border-radius: 12px;
+    padding: 20px; text-align: center;
+  }
+  .takeaway-card .tk-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .takeaway-card .tk-value { font-size: 28px; font-weight: 600; color: var(--brand); margin: 6px 0 2px; }
+  .takeaway-card .tk-sub { font-size: 13px; color: #3c4043; }
+  .takeaway-card.highlight { background: var(--good-soft); border-color: var(--good); }
+  .takeaway-card.highlight .tk-value { color: var(--good); }
+
+  footer { color: var(--muted); font-size: 13px; padding-top: 24px; border-top: 1px solid var(--rule); margin-top: 48px; }
+  a { color: var(--brand); }
+
+  @media (max-width: 720px) {
+    .block-grid, .verdict-row, .takeaway { grid-template-columns: 1fr; }
+    .wrap { padding: 24px; }
+    .hero { padding: 36px 24px 28px; }
+    .hero h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="eyebrow">Rubrik Engineering · Toyota / BIPROGY</div>
+  <h1>SharePoint Backup Analysis — May 15 Follow-up</h1>
+</header>
+
+<main class="wrap">
+
+  <!-- =================== KEY TAKEAWAYS =================== -->
+  <section>
+    <h2>Key Takeaways</h2>
+    <div class="takeaway">
+      <div class="takeaway-card">
+        <div class="tk-label">Blocker</div>
+        <div class="tk-value">Microsoft API Quota</div>
+        <div class="tk-sub">15 M RU/day per Enterprise App — not a Rubrik issue</div>
+      </div>
+      <div class="takeaway-card highlight">
+        <div class="tk-label">Recommendation</div>
+        <div class="tk-value">3-Day SLA + 2 Apps</div>
+        <div class="tk-sub">Only feasible configuration for 190k sites</div>
+      </div>
+      <div class="takeaway-card">
+        <div class="tk-label">Time to full compliance</div>
+        <div class="tk-value">~2.5 Months</div>
+        <div class="tk-sub">~76 days to clear 600 TB backlog</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================== CURRENT STATUS =================== -->
+  <section id="status">
+    <h2>Current Status</h2>
+
+    <div class="metric-grid">
+      <div class="metric accent">
+        <div class="k">Site collections</div>
+        <div class="v">~190,000</div>
+      </div>
+      <div class="metric accent">
+        <div class="k">Total drives</div>
+        <div class="v">~700,000</div>
+      </div>
+      <div class="metric accent">
+        <div class="k">Total files</div>
+        <div class="v">~700 million</div>
+      </div>
+      <div class="metric accent">
+        <div class="k">Total data</div>
+        <div class="v">~3 PB</div>
+      </div>
+      <div class="metric">
+        <div class="k">Current SLA</div>
+        <div class="v">1 day</div>
+      </div>
+      <div class="metric">
+        <div class="k">Current compliance</div>
+        <div class="v">27% — 44%</div>
+        <div class="sub">fluctuates daily</div>
+      </div>
+      <div class="metric">
+        <div class="k">Enterprise Apps</div>
+        <div class="v">1</div>
+      </div>
+      <div class="metric">
+        <div class="k">Daily throughput</div>
+        <div class="v">~85k sites/day</div>
+      </div>
+    </div>
+
+    <h3>Compliance Trend</h3>
+    <div class="bar-row"><span class="label">Jan 2026</span>
+      <div class="bar-track"><div class="bar-fill bad" style="width:10%"></div></div>
+      <span class="num">~10%</span></div>
+    <div class="bar-row"><span class="label">Feb 17</span>
+      <div class="bar-track"><div class="bar-fill warn" style="width:27%"></div></div>
+      <span class="num">~27%</span></div>
+    <div class="bar-row"><span class="label">Late Mar</span>
+      <div class="bar-track"><div class="bar-fill warn" style="width:38%"></div></div>
+      <span class="num">~38%</span></div>
+    <div class="bar-row"><span class="label">Apr 21</span>
+      <div class="bar-track"><div class="bar-fill" style="width:44%"></div></div>
+      <span class="num">~44%</span></div>
+
+    <details class="section-detail">
+      <summary>Raw compliance counts</summary>
+      <div>
+        <table>
+          <thead><tr><th>Date</th><th class="num">Compliant</th><th class="num">Out of Compliance</th><th class="num">%</th></tr></thead>
+          <tbody>
+            <tr><td>Jan 2026</td><td class="num">~18k</td><td class="num">~162k</td><td class="num">~10%</td></tr>
+            <tr><td>Feb 17</td><td class="num">49,298</td><td class="num">134,344</td><td class="num">~27%</td></tr>
+            <tr><td>Late Mar</td><td class="num">70,951</td><td class="num">116,228</td><td class="num">~38%</td></tr>
+            <tr><td>Apr 21</td><td class="num">~85k</td><td class="num">~106k</td><td class="num">~44%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <p>Compliance is climbing month-over-month but is capped by Microsoft's daily API quota — this is a <strong>throttling-bound</strong> problem, not a code issue.</p>
+  </section>
+
+  <!-- =================== THE BLOCKER =================== -->
+  <section id="blocker">
+    <h2>The Blocker — Microsoft Graph Throttling</h2>
+
+    <p>Backup throughput is bounded by Microsoft's <strong>Resource Unit (RU) quota</strong>, not by Rubrik compute or network.</p>
+
+    <div class="metric-grid">
+      <div class="metric">
+        <div class="k">RU quota / App / day</div>
+        <div class="v">15 M</div>
+      </div>
+      <div class="metric">
+        <div class="k">RUs consumed by daily incrementals</div>
+        <div class="v">~12 M / day</div>
+        <div class="sub">~80% of the budget</div>
+      </div>
+      <div class="metric">
+        <div class="k">Delta link lifetime</div>
+        <div class="v">~3 days</div>
+        <div class="sub">expires → full resync required</div>
+      </div>
+    </div>
+
+    <details class="section-detail">
+      <summary>How RUs work & why SLA length matters</summary>
+      <div>
+        <p>RUs are Microsoft's internal cost metric for API calls. Throttling is enforced against the RU budget, not raw request count.</p>
+        <table>
+          <thead><tr><th>API class</th><th class="num">Cost</th></tr></thead>
+          <tbody>
+            <tr><td>Permission-related APIs</td><td class="num">5 RU per call</td></tr>
+            <tr><td>All other APIs</td><td class="num">1 RU per call</td></tr>
+          </tbody>
+        </table>
+        <p>Every backup pays a fixed cost in <strong>metadata APIs</strong> regardless of how much changed. Backing a site up daily pays this metadata tax 3 times in 3 days; backing it up once every 3 days pays it once — making a 3-day SLA materially cheaper in RU terms.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- =================== PENDING DATA =================== -->
+  <section id="data-breakdown">
+    <h2>Pending Data — Three Distinct Blocks</h2>
+    <p>The pending data is not uniform. It comes from three different sources, each with its own size and backup behaviour.</p>
+
+    <div class="cat-strip">
+      <div class="cat cat-backlog">
+        <div class="cat-head">
+          <span class="cat-icon">&#9201;</span>
+          <div class="cat-title">Backlog clearance &middot; one-time</div>
+        </div>
+        <div class="cat-tags">
+          <span class="cat-tag">Block A &middot; ~500 TB</span>
+          <span class="cat-plus">+</span>
+          <span class="cat-tag">Block B &middot; ~100 TB</span>
+        </div>
+      </div>
+
+      <div class="cat cat-regular">
+        <div class="cat-head">
+          <span class="cat-icon">&#128260;</span>
+          <div class="cat-title">Regular incrementals &middot; ongoing</div>
+        </div>
+        <div class="cat-tags">
+          <span class="cat-tag">Block C &middot; ~3.8 TB/day</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="block-grid">
+      <div class="block-card">
+        <span class="pill-top">Block A · One-time</span>
+        <h4>Heavy drives — pending initial backup</h4>
+        <div class="big">~500 TB</div>
+        <p>~450 large drives whose initial backup is still incomplete.</p>
+      </div>
+      <div class="block-card">
+        <span class="pill-top">Block B · One-time</span>
+        <h4>Sites missing regular incrementals</h4>
+        <div class="big">~100 TB</div>
+        <p>~100k sites last backed up in Jan 2026 — changes accumulated since.</p>
+      </div>
+      <div class="block-card">
+        <span class="pill-top">Block C · Ongoing</span>
+        <h4>Regular incrementals — daily new changes</h4>
+        <div class="big">~3.8 TB / day</div>
+        <p>Day-to-day new data across all ~190k sites in scope.</p>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr><th>Block</th><th>Source</th><th class="num">Pending</th></tr></thead>
+      <tbody>
+        <tr><td>A</td><td>Heavy drives — pending initial backup</td><td class="num">~500 TB</td></tr>
+        <tr><td>B</td><td>Sites missing regular incrementals (since Jan 2026)</td><td class="num">~100 TB</td></tr>
+        <tr><td>C</td><td>Regular incrementals — daily new changes</td><td class="num">~3.8 TB / day</td></tr>
+        <tr><td><strong>Total backlog (A + B)</strong></td><td><strong>Combined one-time pending data</strong></td><td class="num"><strong>~600 TB</strong></td></tr>
+      </tbody>
+    </table>
+
+    <details class="section-detail">
+      <summary>Derivation details for each block</summary>
+      <div>
+        <h4>Block A — ~500 TB</h4>
+        <p>~950 TB total capacity across these drives. Assuming ~60% is backup-eligible (rest is duplicated across versions), minus data already ingested, leaves ~500 TB.</p>
+        <h4>Block B — ~100 TB</h4>
+        <div class="formula">100,000 sites × 5.5 files/day × 4 MB/file × 100 days × 0.5 repetition factor ≈ ~110 TB</div>
+        <h4>Block C — ~3.8 TB / day</h4>
+        <p>Average per site: ~4–5 files updated/day at ~4–5 MB each.</p>
+        <div class="formula">4 MB/file × 5 files/site/day × 190,000 sites ≈ 3,800,000 MB/day ≈ ~3.8 TB/day</div>
+      </div>
+    </details>
+  </section>
+
+  <!-- =================== RU COST =================== -->
+  <section id="ru-per-block">
+    <h2>RU Cost per Block</h2>
+
+    <table>
+      <thead>
+        <tr><th>Block</th><th class="num">RU demand (1-day)</th><th class="num">RU demand (3-day)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>A</strong> — Heavy drives (initial backup)</td><td class="num">—</td><td class="num">—</td></tr>
+        <tr><td><strong>B</strong> — One-time clearance (~100 TB)</td><td class="num">—</td><td class="num">—</td></tr>
+        <tr><td><strong>C</strong> — Incrementals today (~70k sites)</td><td class="num"><strong>~12 M / day</strong></td><td class="num"><strong>~20 M / 3 days</strong></td></tr>
+        <tr><td><strong>C</strong> — Incrementals steady state (all ~190k)</td><td class="num"><strong>~33 M / day</strong></td><td class="num"><strong>~54 M / 3 days</strong></td></tr>
+      </tbody>
+    </table>
+
+    <details class="section-detail">
+      <summary>How steady-state demand is derived</summary>
+      <div>
+        <p>Today only ~70k of ~190k sites are actively backing up. Scaling linearly:</p>
+        <div class="formula">20 M × (190k / 70k) ≈ ~54 M RUs per 3-day window</div>
+        <p>The 12 M RU/day figure reflects sites backed up <em>every day</em>. Backing them up once every 3 days means more changes accumulate per backup — so each backup costs more (~20 M over the 3-day window). Different cadences, not the same workload measured twice.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- =================== SOLUTION =================== -->
+  <section id="scenarios">
+    <h2>Recommended Configuration</h2>
+
+    <p>Four configurations modelled: 2 SLAs (1-day, 3-day) × 2 App counts (1, 2).</p>
+
+    <div class="callout bad" style="padding:12px 18px; margin-bottom:16px;">
+      <strong style="color:var(--bad);">1-Day SLA is infeasible at any App count</strong> — steady-state demand (33 M RU/day) exceeds even 2-App capacity (30 M).
+    </div>
+
+    <h3>3-Day SLA — Capacity vs Demand (per 3-day window)</h3>
+
+    <div style="background:var(--bad-soft); border:1px solid #f5c6c4; border-radius:10px; padding:14px 16px; margin:10px 0;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
+        <strong>1 App · 3-Day SLA</strong>
+        <span class="pill bad">Short by 9 M</span>
+      </div>
+      <div class="bar-row" style="grid-template-columns:90px 1fr 70px;">
+        <span class="label">Capacity</span>
+        <div class="bar-track" style="height:18px;"><div class="bar-fill bad" style="width:50%"></div></div>
+        <span class="num">45 M</span>
+      </div>
+      <div class="bar-row" style="grid-template-columns:90px 1fr 70px;">
+        <span class="label">Demand</span>
+        <div class="bar-track" style="height:18px;"><div class="bar-fill" style="width:60%"></div></div>
+        <span class="num">54 M</span>
+      </div>
+    </div>
+
+    <div style="background:var(--good-soft); border:1px solid #b8e0c2; border-radius:10px; padding:14px 16px; margin:10px 0;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
+        <strong>2 Apps · 3-Day SLA</strong>
+        <span class="pill good">36 M headroom</span>
+      </div>
+      <div class="bar-row" style="grid-template-columns:90px 1fr 70px;">
+        <span class="label">Capacity</span>
+        <div class="bar-track" style="height:18px;"><div class="bar-fill good" style="width:100%"></div></div>
+        <span class="num">90 M</span>
+      </div>
+      <div class="bar-row" style="grid-template-columns:90px 1fr 70px;">
+        <span class="label">Demand</span>
+        <div class="bar-track" style="height:18px;"><div class="bar-fill" style="width:60%"></div></div>
+        <span class="num">54 M</span>
+      </div>
+    </div>
+
+    <details class="section-detail">
+      <summary>1-Day SLA analysis (both App counts)</summary>
+      <div>
+        <p>Steady-state demand at 1-day SLA = <strong>~33 M RU/day</strong> for all 190k sites.</p>
+        <table>
+          <thead><tr><th>Config</th><th class="num">Capacity</th><th class="num">Demand</th><th class="num">Gap</th></tr></thead>
+          <tbody>
+            <tr><td>1 App · 1-Day</td><td class="num">15 M</td><td class="num">33 M</td><td class="num"><span class="pill bad">−18 M</span></td></tr>
+            <tr><td>2 Apps · 1-Day</td><td class="num">30 M</td><td class="num">33 M</td><td class="num"><span class="pill bad">−3 M</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="section-detail">
+      <summary>Detailed scenario comparison</summary>
+      <div>
+        <div class="verdict-row">
+          <div class="verdict bad">
+            <span class="badge">Does not work</span>
+            <h4>1 App · 3-Day SLA</h4>
+            <table>
+              <tr><td>Capacity (3-day)</td><td class="num">1 × 15 M × 3 = <strong>45 M</strong></td></tr>
+              <tr><td>Demand</td><td class="num"><strong>~54 M</strong></td></tr>
+              <tr><td>Gap</td><td class="num"><span class="pill bad">−9 M</span></td></tr>
+            </table>
+            <p style="font-size:13px;">Single-app supply is structurally below the steady-state requirement. Backlog may never clear.</p>
+          </div>
+          <div class="verdict good">
+            <span class="badge">Works</span>
+            <h4>2 Apps · 3-Day SLA</h4>
+            <table>
+              <tr><td>Capacity (3-day)</td><td class="num">2 × 15 M × 3 = <strong>90 M</strong></td></tr>
+              <tr><td>Demand</td><td class="num">~54 M</td></tr>
+              <tr><td>Headroom</td><td class="num"><span class="pill good">+36 M</span></td></tr>
+            </table>
+            <p style="font-size:13px;">Supports steady-state SLA and leaves headroom to drain the ~600 TB backlog.</p>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <div class="callout good">
+      <div class="tag">Recommendation</div>
+      <p><strong>3-Day SLA + 2 Enterprise Apps.</strong> Neither a 1-day SLA nor a single app is sufficient at this scale.</p>
+    </div>
+  </section>
+
+  <!-- =================== FORECAST: 1 APP =================== -->
+  <section id="forecast-1app">
+    <h2>Forecast — Compliance Under 1 App &middot; 3-Day SLA</h2>
+
+    <p>What actually happens to compliance if we stay on a <strong>single Enterprise App</strong> with a
+      3-day SLA, starting from <strong>~75,000 compliant sites (~39%)</strong>. Each week the App must first
+      re-protect every already-compliant site; only the leftover RU budget can onboard new ones — so growth
+      decays as the compliant set grows.</p>
+
+    <div class="takeaway">
+      <div class="takeaway-card">
+        <div class="tk-label">Plateau onset</div>
+        <div class="tk-value">~Week 11</div>
+        <div class="tk-sub">~63% &mdash; growth drops below 1.5%/wk</div>
+      </div>
+      <div class="takeaway-card">
+        <div class="tk-label">Hard ceiling</div>
+        <div class="tk-value">~83%</div>
+        <div class="tk-sub">~158k sites &mdash; never exceeded</div>
+      </div>
+      <div class="takeaway-card">
+        <div class="tk-label">Never protected</div>
+        <div class="tk-value">~32k sites</div>
+        <div class="tk-sub">~160 TB backlog stranded</div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <div class="tag">Interpretation</div>
+      <p>Compliance climbs fast at first — about <strong>+3%/week</strong> — so the first ~2 months look
+        healthy, rising from ~39% to ~63% by Week 11. After that, growth falls below <strong>1.5%/week</strong>
+        and visibly stalls: ~76% at 6 months, ~80% at 9 months, never clearing the last ~32k sites
+        (~160 TB of heavy-drive backlog). A single App cannot finish the job — this is the gap the second App closes.</p>
+    </div>
+
+    <h3>Projected weekly compliance</h3>
+    <div class="col-chart">
+      <div class="ceiling" style="bottom:83%"><span>Ceiling ~83%</span></div>
+      <div class="col"><div class="vpct">39%</div><div class="bar" style="height:39.5%"></div></div>
+      <div class="col"><div class="bar" style="height:42.4%"></div></div>
+      <div class="col"><div class="bar" style="height:45.2%"></div></div>
+      <div class="col"><div class="bar" style="height:47.8%"></div></div>
+      <div class="col"><div class="bar" style="height:50.2%"></div></div>
+      <div class="col"><div class="bar" style="height:52.4%"></div></div>
+      <div class="col"><div class="bar" style="height:54.5%"></div></div>
+      <div class="col"><div class="bar" style="height:56.4%"></div></div>
+      <div class="col"><div class="bar" style="height:58.2%"></div></div>
+      <div class="col"><div class="bar" style="height:59.9%"></div></div>
+      <div class="col"><div class="bar" style="height:61.5%"></div></div>
+      <div class="col slow"><div class="vpct">63%</div><div class="bar" style="height:63.0%"></div></div>
+      <div class="col slow"><div class="bar" style="height:64.3%"></div></div>
+      <div class="col slow"><div class="bar" style="height:65.6%"></div></div>
+      <div class="col slow"><div class="bar" style="height:66.8%"></div></div>
+      <div class="col slow"><div class="vpct">68%</div><div class="bar" style="height:67.9%"></div></div>
+    </div>
+    <div class="col-axis">
+      <span class="ax">0</span><span class="ax">1</span><span class="ax">2</span><span class="ax">3</span>
+      <span class="ax">4</span><span class="ax">5</span><span class="ax">6</span><span class="ax">7</span>
+      <span class="ax">8</span><span class="ax">9</span><span class="ax">10</span><span class="ax">11</span>
+      <span class="ax">12</span><span class="ax">13</span><span class="ax">14</span><span class="ax">15</span>
+    </div>
+    <div class="axis-title">Weeks &rarr;</div>
+
+    <div class="legend" style="margin-top:12px;">
+      <span><span class="sw" style="background:#1a73e8"></span>Growing (&ge;&nbsp;1.5%/wk)</span>
+      <span><span class="sw" style="background:#f9ab00"></span>Slow growth / near-plateau (&lt;&nbsp;1.5%/wk)</span>
+      <span><span class="sw" style="background:#137333"></span>Hard ceiling (~83%)</span>
+    </div>
+
+    <details class="section-detail">
+      <summary>Calculations &amp; assumptions</summary>
+      <div>
+        <p><strong>Inputs:</strong> start 75k of ~190k sites; 1 App = 105 M RU/week; ~665 RU/week to keep a
+          site compliant; ~9,800 RU to onboard one site (600 TB spread uniformly over the 120k pending sites,
+          at ~0.5 TB per 1 M RU). Static backlog assumed — no further accrual on waiting sites (optimistic).</p>
+        <p>Each week, capacity first maintains the compliant set; leftover headroom onboards new sites:</p>
+        <div class="formula">N(w+1) = N(w) + (105M &minus; 665&times;N(w)) / 9,800 = 0.9321&times;N(w) + 10,714</div>
+        <p>This converges to a ceiling set by capacity &divide; maintenance, <em>independent of backlog size</em>:</p>
+        <div class="formula">Ceiling = 105M / 665 &asymp; 157,900 sites &asymp; 83%</div>
+        <p>Backlog size only sets <em>how fast</em> the ceiling is reached (half-life ~10 weeks), not its
+          height. Weekly gain crosses below 1.5% (~2,850 sites) at Week 11.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- =================== TIMELINE =================== -->
+  <section id="timeline">
+    <h2>Timeline to Full Compliance — ~2.5 Months</h2>
+
+    <p>Assuming the recommended <strong>2 Apps · 3-day SLA</strong> (90 M RU per 3-day window).</p>
+
+    <div class="phase-block">
+      <div class="phase-head">
+        <span class="phase-pill phase-1">Phase 1 · Today</span>
+        <span class="phase-sub">~70k sites active, backlog catch-up in progress</span>
+      </div>
+      <div class="stacked-bar">
+        <div class="seg seg-incr" style="width:22.2%"><span class="seg-label">20 M · Incrementals</span></div>
+        <div class="seg seg-backlog" style="width:77.8%"><span class="seg-label">70 M · Backlog</span></div>
+      </div>
+      <div class="stacked-axis"><span>0</span><span>90 M total</span></div>
+    </div>
+
+    <div class="phase-block">
+      <div class="phase-head">
+        <span class="phase-pill phase-2">Phase 2 · Post-backlog</span>
+        <span class="phase-sub">All ~190k sites, steady state</span>
+      </div>
+      <div class="stacked-bar">
+        <div class="seg seg-incr" style="width:60%"><span class="seg-label">54 M · Incrementals</span></div>
+        <div class="seg seg-free" style="width:40%"><span class="seg-label">36 M · Headroom</span></div>
+      </div>
+      <div class="stacked-axis"><span>0</span><span>90 M total</span></div>
+    </div>
+
+    <div class="legend" style="margin-top:4px;">
+      <span><span class="sw" style="background:#1a73e8"></span>Incrementals</span>
+      <span><span class="sw" style="background:#f9ab00"></span>Backlog clearance</span>
+      <span><span class="sw" style="background:#b8e0c2"></span>Unused headroom</span>
+    </div>
+
+    <h3>Projection</h3>
+    <div class="formula">~50 M RU headroom/cycle × 0.5 TB per 1 M RU ≈ 24 TB cleared per 3-day cycle
+600 TB ÷ 24 TB/cycle = ~25 cycles ≈ ~76 days ≈ ~2.5 months</div>
+
+    <h3>Projected weekly compliance — 2 Apps</h3>
+    <p>With the second App, weekly capacity (210 M RU) stays well above full-scale maintenance, so compliance
+      never plateaus — it climbs past the 1-App ceiling straight to <strong>full compliance in ~10–11 weeks
+      (~2.5 months)</strong>.</p>
+
+    <div class="callout good">
+      <div class="tag">Interpretation</div>
+      <p>Doubling capacity removes the plateau entirely: compliance rises <strong>~6–8%/week</strong> and
+        reaches 100% in ~10–11 weeks, clearing the full 600 TB backlog along the way. The headroom the 1-App
+        case never has is exactly what finishes the job.</p>
+    </div>
+
+    <h4 style="margin:18px 0 0; font-size:14px; color:#3c4043;">2 Apps · 3-Day SLA</h4>
+    <div class="col-chart">
+      <div class="ceiling" style="bottom:83%; border-top-color:var(--muted);"><span style="color:var(--muted);">1-App ceiling ~83%</span></div>
+      <div class="col ok"><div class="vpct">39%</div><div class="bar" style="height:39.5%"></div></div>
+      <div class="col ok"><div class="bar" style="height:48.1%"></div></div>
+      <div class="col ok"><div class="bar" style="height:56.1%"></div></div>
+      <div class="col ok"><div class="bar" style="height:63.6%"></div></div>
+      <div class="col ok"><div class="bar" style="height:70.5%"></div></div>
+      <div class="col ok"><div class="bar" style="height:77.0%"></div></div>
+      <div class="col ok"><div class="vpct">83%</div><div class="bar" style="height:83.1%"></div></div>
+      <div class="col ok"><div class="bar" style="height:88.7%"></div></div>
+      <div class="col ok"><div class="bar" style="height:94.0%"></div></div>
+      <div class="col ok"><div class="bar" style="height:98.9%"></div></div>
+      <div class="col ok"><div class="vpct">100%</div><div class="bar" style="height:100%"></div></div>
+    </div>
+    <div class="col-axis">
+      <span class="ax">0</span><span class="ax">1</span><span class="ax">2</span><span class="ax">3</span>
+      <span class="ax">4</span><span class="ax">5</span><span class="ax">6</span><span class="ax">7</span>
+      <span class="ax">8</span><span class="ax">9</span><span class="ax">10</span>
+    </div>
+    <div class="axis-title">Weeks &rarr;</div>
+
+    <div class="legend" style="margin-top:12px;">
+      <span><span class="sw" style="background:#137333"></span>2 Apps — climbs to 100%</span>
+      <span><span class="sw" style="background:#5f6368"></span>Where 1 App stalls (~83%)</span>
+    </div>
+
+    <details class="section-detail">
+      <summary>Calculations &amp; assumptions</summary>
+      <div>
+        <p><strong>Inputs:</strong> same as the 1-App model but capacity = <strong>2 Apps = 210 M RU/week</strong>
+          (90 M per 3-day cycle); start 75k of ~190k; ~665 RU/week maintenance per site; ~9,800 RU to onboard
+          one site.</p>
+        <p>Same weekly recurrence, doubled capacity:</p>
+        <div class="formula">N(w+1) = N(w) + (210M &minus; 665&times;N(w)) / 9,800 = 0.9321&times;N(w) + 21,429</div>
+        <p>The implied ceiling (210M / 665 &asymp; 316k sites) sits far above the 190k total, so there is no
+          plateau — N reaches all 190k (100%) at ~Week 10, fully clearing the 600 TB backlog and matching the
+          ~2.5-month projection above.</p>
+      </div>
+    </details>
+
+    <h3>Backlog Burndown</h3>
+    <div class="bar-row"><span class="label">Day 0 · Start</span>
+      <div class="bar-track"><div class="bar-fill bad" style="width:100%"></div></div>
+      <span class="num">~600 TB</span></div>
+    <div class="bar-row"><span class="label">Day 25 · ~1 mo</span>
+      <div class="bar-track"><div class="bar-fill warn" style="width:67%"></div></div>
+      <span class="num">~400 TB</span></div>
+    <div class="bar-row"><span class="label">Day 50 · ~1.5 mo</span>
+      <div class="bar-track"><div class="bar-fill warn" style="width:33%"></div></div>
+      <span class="num">~200 TB</span></div>
+    <div class="bar-row"><span class="label">Day 76 · ~2.5 mo</span>
+      <div class="bar-track"><div class="bar-fill good" style="width:2%"></div></div>
+      <span class="num">~0 TB</span></div>
+
+    <details class="section-detail">
+      <summary>Headroom breakdown & rate derivation</summary>
+      <div>
+        <table>
+          <thead><tr><th>Phase</th><th class="num">3-day capacity</th><th class="num">Demand</th><th class="num">Headroom</th></tr></thead>
+          <tbody>
+            <tr><td>Phase 1 (~70k sites active)</td><td class="num">90 M</td><td class="num">~20 M</td><td class="num"><strong>~70 M</strong></td></tr>
+            <tr><td>Phase 2 (all 190k, steady state)</td><td class="num">90 M</td><td class="num">~54 M</td><td class="num"><strong>~36 M</strong></td></tr>
+            <tr><td colspan="3"><em>Average headroom</em></td><td class="num"><strong>~50 M / cycle</strong></td></tr>
+          </tbody>
+        </table>
+        <p><strong>Reference — December full-backup data:</strong> 240 TB ingested using 470 M RUs → ~0.5 TB per 1 M RUs.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- =================== ASSUMPTIONS & GLOSSARY =================== -->
+  <section>
+    <details class="section-detail">
+      <summary><strong>Assumptions</strong></summary>
+      <div>
+        <table>
+          <tbody>
+            <tr><td>Source data</td><td>Toyota's data and historical trends from the past several months.</td></tr>
+            <tr><td>Microsoft API quota (1 App)</td><td>15 Million RUs / day.</td></tr>
+            <tr><td>App expansion</td><td>Microsoft permits 2 Apps, each with its own 15 M RU/day quota.</td></tr>
+            <tr><td>Delta link lifetime</td><td>~3 days. Beyond this, a full resync is required.</td></tr>
+            <tr><td>Content vs metadata APIs</td><td>~50% of RU budget goes to content APIs, rest to metadata.</td></tr>
+            <tr><td>Per-site change rate</td><td>~4–5 files/day, each ~4–5 MB.</td></tr>
+            <tr><td>Sample representativeness</td><td>The active 70k sites are treated as a random subset of 190k.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="section-detail">
+      <summary><strong>Glossary</strong></summary>
+      <div>
+        <table>
+          <thead><tr><th style="width:160px">Term</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>RU</td><td>Resource Unit — Microsoft's quota unit for Graph API consumption.</td></tr>
+            <tr><td>Delta link</td><td>Token for fetching only changes since last sync. Expires after ~3–4 days.</td></tr>
+            <tr><td>Enterprise App</td><td>Azure AD app registration with its own RU quota.</td></tr>
+            <tr><td>Site collection</td><td>A top-level SharePoint site. Toyota has ~190k in scope.</td></tr>
+            <tr><td>Incremental backup</td><td>Captures only changes since the last successful backup.</td></tr>
+            <tr><td>Repetition factor</td><td>Estimate of how often the same file changes. 0.5 = ~half are re-changes.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <!-- =================== Q&A =================== -->
+  <section id="qa">
+    <h2>Questions & Answers</h2>
+
+    <div class="qa-group">
+      <h3>Backlog & Capacity <span class="group-tag">Backlog</span></h3>
+
+      <details class="qa">
+        <summary>What is the basis for the ~600 TB pending backlog figure?</summary>
+        <div class="a">~950 TB pending across ~450 large drives. ~60% is backup-eligible, minus data already ingested → ~500 TB. Plus ~100 TB of accumulated incremental change for January-only sites = ~600 TB.</div>
+      </details>
+      <details class="qa">
+        <summary>What is the basis for the ~100 TB incremental estimate?</summary>
+        <div class="a">~100k sites last backed up in January 2026. Per-site change rate extrapolated over ~100 days:
+          <div class="formula">100,000 × 5.5 × 4 MB × 100 days × 0.5 ≈ ~110 TB</div></div>
+      </details>
+      <details class="qa">
+        <summary>Last successful backups span June 2025–Jan 2026. Using the midpoint gives ~200 TB. Is this correct?</summary>
+        <div class="a">Before the new scheduling strategy began in late January, incremental backups were scheduled randomly, so most sites do have a January backup. We verified the timings from the database, confirming the ~100-day basis.</div>
+      </details>
+      <details class="qa">
+        <summary>How does RU consumption change over time as backlog and incrementals coexist?</summary>
+        <div class="a">Today ~70k sites use ~20 M RUs / 3 days. Steady state (all 190k) = ~54 M. Capacity (2 Apps) stays at 90 M. Headroom drops from ~70 M to ~36 M, averaging ~50 M per cycle for backlog clearance.</div>
+      </details>
+      <details class="qa">
+        <summary>How is the ~36 M headroom figure derived?</summary>
+        <div class="a"><div class="formula">90 M − 54 M = ~36 M RUs of headroom in steady state</div></div>
+      </details>
+    </div>
+
+    <div class="qa-group">
+      <h3>SLA Choices <span class="group-tag">SLA</span></h3>
+
+      <details class="qa">
+        <summary>Why is a 1-day SLA infeasible while a 3-day SLA works?</summary>
+        <div class="a">Each backup includes fixed <strong>metadata APIs</strong> every time, plus <strong>content APIs</strong> proportional to changes. One backup every 3 days eliminates two of three metadata rounds per site, saving a large fraction of the RU budget.</div>
+      </details>
+      <details class="qa">
+        <summary>Given ~100 TB/month growth, what is the expected timeline including that growth?</summary>
+        <div class="a">The ~100 TB/month growth is already factored into the steady-state 54 M RU / 3-day demand figure. It does not need to be counted again.</div>
+      </details>
+      <details class="qa">
+        <summary>Has the 7-day SLA proposal been dropped?</summary>
+        <div class="a">Yes. Beyond ~3 days the delta link expires, making 4+ day SLAs impractical.</div>
+      </details>
+      <details class="qa">
+        <summary>Does "complete resynchronization required" mean differential extraction becomes unreliable after 4 days?</summary>
+        <div class="a">Yes. On day 4 the delta link is invalid, so all items must be re-fetched — consuming substantially more API calls.</div>
+      </details>
+      <details class="qa">
+        <summary>The April 23 figure was 27.40%, not ~44%. Why the discrepancy?</summary>
+        <div class="a">Compliance fluctuates daily. Over the past week, 27.4% was the low and 44% the high — best expressed as a <strong>range (27.4% – 44%)</strong>.</div>
+      </details>
+    </div>
+
+    <div class="qa-group">
+      <h3>Resource Units Methodology <span class="group-tag">RU</span></h3>
+
+      <details class="qa">
+        <summary>What is the basis for the 7.89 TB/day processing figure?</summary>
+        <div class="a"><div class="formula">600 TB / 76 days ≈ 7.89 TB/day</div></div>
+      </details>
+      <details class="qa">
+        <summary>What is the daily processable capacity for the 1-App configuration?</summary>
+        <div class="a">With a single App, steady state is not sustainable at this scale — the backlog may never clear.</div>
+      </details>
+      <details class="qa">
+        <summary>Is there official Microsoft documentation supporting the 15 M RU/day figure?</summary>
+        <div class="a">Microsoft's public docs state 6 M RU for tenants with &gt;50k licenses, but we observe ~15 M in practice on this tenant. Effective limits vary by tenant size.</div>
+      </details>
+      <details class="qa">
+        <summary>Could the remaining 120k sites have different usage patterns than the active 70k?</summary>
+        <div class="a">The 70k are a random subset, so usage patterns are assumed broadly similar. We will refine the estimate as more sites enter steady state.</div>
+      </details>
+      <details class="qa">
+        <summary>What constraint determined the 20 M RU / 3-day number — throttling or Rubrik concurrency?</summary>
+        <div class="a">The 20 M figure is an <strong>estimate of demand</strong>, not an observed throttling limit. It is derived from the distribution of metadata vs content APIs. We can share the per-API breakdown if needed.</div>
+      </details>
+      <details class="qa">
+        <summary>Why is the 3-day estimate (~20 M) lower than the daily observed (~12 M)?</summary>
+        <div class="a">12 M/day reflects daily backups. Backing up once every 3 days means more changes accumulate per backup — ~20 M over 3 days. Different cadences, not the same workload measured twice.</div>
+      </details>
+      <details class="qa">
+        <summary>Is the remaining ~3 M RUs (20% not used by daily incrementals) consumed by initial backups?</summary>
+        <div class="a">Yes — that residual budget is used by the heavy-drive initial backups (Block A).</div>
+      </details>
+    </div>
+
+    <div class="qa-group">
+      <h3>App Expansion <span class="group-tag">Ops</span></h3>
+
+      <details class="qa">
+        <summary>Will the 2-App proposal affect other Enterprise Apps using SharePoint Online?</summary>
+        <div class="a">The second app registration gets its own RU quota — it does not change throttling for unrelated apps. We can work with BIPROGY to scope the operational and security review before rollout.</div>
+      </details>
+      <details class="qa">
+        <summary>Does this mean even with two apps, the 1-day SLA cannot be met?</summary>
+        <div class="a">Correct. Even with 2 Apps the daily demand exceeds the combined daily quota at full scale; 3-day SLA is the practical ceiling.</div>
+      </details>
+      <details class="qa">
+        <summary>Can we start with 1 App on a 3-day SLA, observe, then decide on expansion?</summary>
+        <div class="a">A staged approach is reasonable. Moving to a 3-day SLA under 1 App lets both sides observe real RU utilization and backlog trend. We recommend agreeing in advance on the metrics and thresholds that would trigger expansion, so the decision is not delayed.</div>
+      </details>
+    </div>
+  </section>
+
+  <footer>
+    Rubrik Engineering · Toyota / BIPROGY · May 15, 2026 follow-up
+  </footer>
+</main>
+</body>
+</html>
